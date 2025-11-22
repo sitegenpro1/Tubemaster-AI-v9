@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, Input, Button, Spinner } from '../components/UI';
 import { analyzeCompetitor } from '../services/geminiService';
@@ -17,12 +18,13 @@ export const CompetitorAnalysis: React.FC = () => {
     setData(null);
     
     try {
+      // Calls the Hybrid (Scraper + AI) service
       const result = await analyzeCompetitor(url);
-      if (!result) throw new Error("Analysis yielded no data.");
+      if (!result) throw new Error("No analysis data returned.");
       setData(result);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setError("Unable to analyze channel. Please verify the URL or try again later.");
+      setError("Analysis failed. Please ensure the URL is correct.");
     } finally {
       setLoading(false);
     }
@@ -30,74 +32,83 @@ export const CompetitorAnalysis: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
-      <SEO title="YouTube Competitor Spy Tool" description="Ethically analyze competitor YouTube channels." path="/competitors" />
+      <SEO title="Competitor Spy" description="Hybrid AI + Web Scraping analysis." path="/competitors" />
       
       <div className="text-center space-y-4">
         <h2 className="text-3xl md:text-4xl font-bold text-white">Competitor Spy</h2>
-        <p className="text-slate-400 max-w-2xl mx-auto">
-          Hybrid Analysis: Web Scraper + Groq (OpenAI OSS 120B) Logic. 
-          <br/>Enter a channel URL to extract content gaps and opportunities.
+        <p className="text-slate-400">
+          Deep channel analysis using Hybrid Logic (Web Scraping + AI Reasoning).
         </p>
       </div>
 
-      <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 shadow-xl">
-        <div className="flex flex-col md:flex-row gap-3">
+      <div className="bg-slate-900/50 p-8 rounded-2xl border border-slate-800 shadow-xl">
+        <div className="flex flex-col md:flex-row gap-4">
           <Input 
-            placeholder="https://www.youtube.com/@ChannelName"
+            placeholder="Paste Channel URL (e.g., https://youtube.com/@ChannelName)"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
           />
-          <Button onClick={handleAnalyze} disabled={loading} className="md:w-40">
-            {loading ? <Spinner /> : 'Spy'}
+          <Button onClick={handleAnalyze} disabled={loading || !url} className="md:w-48 font-bold text-lg">
+            {loading ? <><Spinner /> Scanning...</> : 'Analyze Channel'}
           </Button>
         </div>
-        {error && <p className="text-rose-400 text-sm mt-3 text-center">{error}</p>}
+        {error && (
+          <div className="mt-4 p-3 bg-rose-500/10 border border-rose-500/20 rounded text-rose-400 text-sm text-center">
+            {error}
+          </div>
+        )}
       </div>
 
+      {loading && !data && (
+        <div className="text-center py-12 animate-pulse">
+          <div className="text-4xl mb-4">🕵️‍♂️</div>
+          <p className="text-slate-400">Scraping channel data & analyzing content gaps...</p>
+        </div>
+      )}
+
       {data && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-slide-up">
           <div className="grid md:grid-cols-2 gap-6">
-            <Card title={data.channelName || 'Unknown Channel'}>
-              <div className="text-center py-4">
-                <p className="text-sm text-slate-500 uppercase tracking-wider">Estimated Reach</p>
-                <p className="text-3xl font-bold text-brand-400 mt-1">{data.subscriberEstimate || 'N/A'}</p>
+            <Card title="Channel Profile">
+              <div className="text-center py-2">
+                <h3 className="text-2xl font-bold text-white">{data.channelName || 'Detected Channel'}</h3>
+                <div className="mt-2 inline-block bg-slate-800 px-3 py-1 rounded-full text-xs text-slate-400 uppercase tracking-wider">
+                  Est. Subs: <span className="text-brand-400 font-bold">{data.subscriberEstimate}</span>
+                </div>
               </div>
             </Card>
-             <Card title="Strategic Action Plan" className="border-brand-500/30 bg-brand-900/10">
-              <p className="text-slate-300 leading-relaxed">{data.actionPlan || 'No action plan generated.'}</p>
+            <Card title="Strategic Attack Plan" className="bg-brand-900/10 border-brand-500/30">
+              <p className="text-lg text-slate-200 italic">"{data.actionPlan}"</p>
             </Card>
           </div>
           
           <div className="grid md:grid-cols-3 gap-6">
-            {/* Strengths */}
-            <Card title="Strengths" className="border-green-900/50">
-              <ul className="space-y-3">
+            <Card title="Strengths" className="border-emerald-500/20">
+              <ul className="space-y-2">
                 {data.strengths?.map((s, i) => (
-                  <li key={i} className="flex items-start gap-2 text-slate-300 text-sm">
-                    <span className="text-green-400 mt-1">✓</span> {s}
+                  <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="text-emerald-400">✓</span> {s}
                   </li>
                 ))}
               </ul>
             </Card>
 
-            {/* Weaknesses */}
-            <Card title="Weaknesses" className="border-red-900/50">
-               <ul className="space-y-3">
+            <Card title="Weaknesses" className="border-rose-500/20">
+               <ul className="space-y-2">
                 {data.weaknesses?.map((s, i) => (
-                  <li key={i} className="flex items-start gap-2 text-slate-300 text-sm">
-                    <span className="text-red-400 mt-1">✕</span> {s}
+                  <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="text-rose-400">✕</span> {s}
                   </li>
                 ))}
               </ul>
             </Card>
 
-            {/* Gaps */}
-            <Card title="Content Gaps" className="border-amber-900/50">
-               <ul className="space-y-3">
+            <Card title="Missed Gaps" className="border-amber-500/20">
+               <ul className="space-y-2">
                 {data.contentGaps?.map((s, i) => (
-                  <li key={i} className="flex items-start gap-2 text-slate-300 text-sm">
-                    <span className="text-amber-400 mt-1">⚠</span> {s}
+                  <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="text-amber-400">⚠</span> {s}
                   </li>
                 ))}
               </ul>
