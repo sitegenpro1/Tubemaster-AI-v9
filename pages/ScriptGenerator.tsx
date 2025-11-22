@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, Input, Button, Spinner, Select, Badge } from '../components/UI';
 import { generateScript } from '../services/geminiService';
