@@ -20,11 +20,15 @@ export const CompetitorAnalysis: React.FC = () => {
     try {
       // Calls the Hybrid (Scraper + AI) service
       const result = await analyzeCompetitor(url);
-      if (!result) throw new Error("No analysis data returned.");
-      setData(result);
+      
+      if (result && (result.strengths || result.actionPlan)) {
+        setData(result);
+      } else {
+        throw new Error("Unable to analyze channel data.");
+      }
     } catch (err) {
       console.error(err);
-      setError("Analysis failed. Please ensure the URL is correct.");
+      setError("Analysis failed. Please check the URL and try again.");
     } finally {
       setLoading(false);
     }
@@ -72,7 +76,7 @@ export const CompetitorAnalysis: React.FC = () => {
           <div className="grid md:grid-cols-2 gap-6">
             <Card title="Channel Profile">
               <div className="text-center py-2">
-                <h3 className="text-2xl font-bold text-white">{data.channelName || 'Detected Channel'}</h3>
+                <h3 className="text-2xl font-bold text-white">{data.channelName || 'Analyzed Channel'}</h3>
                 <div className="mt-2 inline-block bg-slate-800 px-3 py-1 rounded-full text-xs text-slate-400 uppercase tracking-wider">
                   Est. Subs: <span className="text-brand-400 font-bold">{data.subscriberEstimate}</span>
                 </div>
