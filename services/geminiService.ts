@@ -3,41 +3,28 @@ import { ThumbnailGenResult } from "../types";
 
 // --- CONFIGURATION ---
 
-// Groq Config (Reasoning & Text)
-// Using Llama 3.3 70B as the high-intelligence reasoning model
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "llama-3.3-70b-versatile"; 
 
-// OpenRouter Config (Vision)
-// Using Grok 4.1 or equivalent Vision model
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const OPENROUTER_VISION_MODEL = "x-ai/grok-vision-beta"; // Fallback compatible model name
+const OPENROUTER_VISION_MODEL = "x-ai/grok-vision-beta"; 
 
 // --- API KEY MANAGEMENT ---
 
 const getApiKey = (provider: 'GROQ' | 'OPENROUTER'): string => {
-  let key = "";
-  
-  // Vercel injects VITE_ prefixed variables at build time via the 'define' plugin in vite.config.ts
-  // We access them directly from process.env for compatibility with the build config
+  // In Vite, we access env vars via import.meta.env
   if (provider === 'GROQ') {
-    // @ts-ignore
-    key = process.env.VITE_GROQ_API_KEY || "";
+    return import.meta.env.VITE_GROQ_API_KEY || "";
   } else {
-    // @ts-ignore
-    key = process.env.VITE_OPENROUTER_API_KEY || "";
+    return import.meta.env.VITE_OPENROUTER_API_KEY || "";
   }
-  
-  return key ? key.replace(/["']/g, "").trim() : "";
 };
 
 // --- CORE HELPERS ---
 
 const cleanJson = (text: string): string => {
   if (!text) return "{}";
-  // Remove markdown code blocks
   let clean = text.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
-  // Remove thinking/reasoning blocks often found in reasoning models
   clean = clean.replace(/<think>[\s\S]*?<\/think>/g, "");
   
   const firstBrace = clean.indexOf('{');
@@ -57,9 +44,6 @@ const callLLM = async (
 ): Promise<string> => {
   const url = provider === 'GROQ' ? GROQ_API_URL : OPENROUTER_API_URL;
   const apiKey = getApiKey(provider);
-
-  // We do NOT throw an error if the key is missing here. 
-  // We let the request go through. If it fails 401, we handle it gracefully.
   
   const headers: Record<string, string> = {
     "Authorization": `Bearer ${apiKey}`,
@@ -87,14 +71,15 @@ const callLLM = async (
     if (!response.ok) {
       const errText = await response.text();
       console.error(`LLM Error (${response.status}):`, errText);
-      throw new Error(`AI Provider Error: ${response.status}`);
+      // We return empty JSON on failure to prevent app crashes
+      return "{}";
     }
 
     const data = await response.json();
     return data.choices?.[0]?.message?.content || "{}";
   } catch (error) {
     console.error("LLM Call Failed:", error);
-    throw error;
+    return "{}";
   }
 };
 
@@ -133,81 +118,64 @@ export const findKeywords = async (topic: string): Promise<any[]> => {
   const prompt = `
     Act as a YouTube SEO Algorithm Expert.
     Topic: "${topic}"
-    
     Generate 10 highly specific keywords/tags.
-    Analyze them with these metrics:
-    1. Search Volume (Monthly estimate)
-    2. Difficulty (0-100)
-    3. Opportunity Score (0-100)
-    4. Trend (Rising/Stable/Falling)
-    5. Intent (Educational/Entertainment/etc)
-    6. CPC (Ad value)
-    7. Competition Density
-    8. Top Competitor Name
-    9. Video Age Avg
-    10. CTR Potential
-    
-    Return strictly a JSON object: { "keywords": [ { "keyword": "...", "searchVolume": "...", ... } ] }
+    Return strictly a JSON object: { "keywords": [ { "keyword": "...", "searchVolume": "...", "difficulty": 50, "opportunityScore": 80, "trend": "Rising", "intent": "Educational", "cpc": "$1.20", "competitionDensity": "Medium", "topCompetitor": "Channel Name", "videoAgeAvg": "2 years", "ctrPotential": "High" } ] }
   `;
-
   const json = await callLLM('GROQ', GROQ_MODEL, [{ role: "user", content: prompt }]);
   try {
     const parsed = JSON.parse(cleanJson(json));
     return Array.isArray(parsed.keywords) ? parsed.keywords : [];
   } catch (e) {
-    console.error("Keyword parsing failed", e);
     return [];
   }
 };
 
-// HYBRID MODEL: Scraper + AI
+// HYBRID MODEL: Web Scraper + AI Reasoning
 export const analyzeCompetitor = async (channelUrl: string): Promise<any> => {
   let contextData = "";
-
-  // 1. Web Scraping Layer (Hybrid)
+  
+  // 1. Web Scraping Layer
   try {
-    // Using AllOrigins to bypass CORS for client-side scraping
-    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(channelUrl)}`;
-    const res = await fetch(proxy);
-    if (res.ok) {
-      const data = await res.json();
-      const html = data.contents || "";
+    // Use AllOrigins to proxy the request and avoid CORS
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(channelUrl)}`;
+    const response = await fetch(proxyUrl);
+    
+    if (response.ok) {
+      const data = await response.json();
+      const html = data.contents;
       
-      // Basic regex extraction since we can't use DOMParser easily on raw strings in all envs
-      const title = html.match(/<title>(.*?)<\/title>/)?.[1] || "";
-      const desc = html.match(/name="description" content="(.*?)"/)?.[1] || "";
-      const keywords = html.match(/name="keywords" content="(.*?)"/)?.[1] || "";
+      // Regex extraction for key metadata (lighter than parsing full DOM)
+      const titleMatch = html.match(/<title>(.*?)<\/title>/);
+      const descMatch = html.match(/name="description" content="(.*?)"/);
+      const keywordsMatch = html.match(/name="keywords" content="(.*?)"/);
       
-      contextData = `Channel Title: ${title}\nDescription: ${desc}\nKeywords: ${keywords}`;
+      const title = titleMatch ? titleMatch[1] : "Unknown Channel";
+      const description = descMatch ? descMatch[1] : "";
+      const keywords = keywordsMatch ? keywordsMatch[1] : "";
+      
+      contextData = `Channel Name: ${title}\nDescription: ${description}\nKeywords: ${keywords}`;
     }
   } catch (e) {
-    console.warn("Scraping layer failed, falling back to pure AI inference.");
-  }
-
-  if (!contextData) {
-    contextData = `Channel URL: ${channelUrl} (Scraping unreachable, infer from URL)`;
+    console.warn("Scraping failed, proceeding with AI inference only.", e);
+    contextData = `Channel URL: ${channelUrl} (Metadata could not be scraped)`;
   }
 
   // 2. AI Reasoning Layer
   const prompt = `
-    Analyze this YouTube competitor based on the scraped data below:
-    ${contextData.substring(0, 1500)}
-
-    Task: Provide a commercial strategic analysis.
-    1. Estimate subscriber range based on fame/content.
-    2. List 3 strengths.
-    3. List 3 weaknesses.
-    4. Identify 3 Content Gaps (topics they miss).
-    5. Create a 1-sentence strategic action plan to beat them.
-
-    Return strictly JSON:
+    Analyze this competitor channel based on the available data:
+    ${contextData.substring(0, 2000)}
+    
+    If data is scarce, infer based on the channel name or likely niche.
+    
+    Task: Provide a strategic analysis.
+    Return JSON:
     {
       "channelName": "...",
-      "subscriberEstimate": "...",
-      "strengths": ["..."],
-      "weaknesses": ["..."],
-      "contentGaps": ["..."],
-      "actionPlan": "..."
+      "subscriberEstimate": "e.g. 100k-500k",
+      "strengths": ["strength 1", "strength 2", "strength 3"],
+      "weaknesses": ["weakness 1", "weakness 2", "weakness 3"],
+      "contentGaps": ["gap 1", "gap 2", "gap 3"],
+      "actionPlan": "One sentence strategy to beat them."
     }
   `;
 
@@ -244,7 +212,7 @@ export const generateThumbnail = async (prompt: string, style: string, mood: str
     try {
       finalPrompt = await callLLM('GROQ', GROQ_MODEL, [{ 
         role: "user", 
-        content: `Optimize this image prompt for Flux AI. Make it highly detailed, cinematic lighting. Prompt: "${prompt}". Style: ${style}, ${mood}. Output ONLY text.` 
+        content: `Optimize this image prompt for Flux AI. Make it highly detailed. Prompt: "${prompt}". Style: ${style}, ${mood}. Output ONLY text.` 
       }], false);
     } catch (e) { /* ignore */ }
   }
@@ -262,19 +230,7 @@ export const generateThumbnail = async (prompt: string, style: string, mood: str
 
 export const compareThumbnailsVision = async (imgA: string, imgB: string, provider: 'GROQ' | 'OPENROUTER'): Promise<any> => {
   const [cA, cB] = await Promise.all([compressImage(imgA), compressImage(imgB)]);
-  
-  const prompt = `
-    Analyze these two YouTube thumbnails. 
-    Which one has higher CTR potential?
-    Return JSON:
-    {
-      "winner": "A" or "B",
-      "scoreA": number 0-10,
-      "scoreB": number 0-10,
-      "reasoning": "summary...",
-      "breakdown": [ { "criterion": "Contrast", "winner": "A", "explanation": "..." } ]
-    }
-  `;
+  const prompt = `Analyze these two thumbnails. Which has higher CTR? Return JSON: { "winner": "A", "scoreA": 8, "scoreB": 6, "reasoning": "...", "breakdown": [{"criterion": "Contrast", "winner": "A", "explanation": "..."}] }`;
 
   const json = await callLLM('OPENROUTER', OPENROUTER_VISION_MODEL, [
     {
