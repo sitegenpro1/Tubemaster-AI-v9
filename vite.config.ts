@@ -3,21 +3,14 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-    // Load env file based on `mode` in the current working directory.
-    // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
-    const env = loadEnv(mode, (process as any).cwd(), '');
-    
-    // Construct a process.env object to polyfill in the browser
-    const processEnv = {
-      ...env,
-      // Google Gemini Key (Check various naming conventions)
-      'API_KEY': env.API_KEY || env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY || env.VITE_GOOGLE_API_KEY || '',
-      // Groq Key
-      'GROQ_API_KEY': env.GROQ_API_KEY || env.VITE_GROQ_API_KEY || '',
-      // OpenRouter Key
-      'OPENROUTER_API_KEY': env.OPENROUTER_API_KEY || env.VITE_OPENROUTER_API_KEY || '',
-      'NODE_ENV': mode
-    };
+    // 1. Load env from local .env files (for local dev)
+    const env = loadEnv(mode, '.', '');
+
+    // 2. Prioritize System Environment Variables (Vercel Dashboard)
+    // If running on Vercel, process.env.VITE_... will be present.
+    // If running locally, env.VITE_... will be present from loaded files.
+    const groqKey = process.env.VITE_GROQ_API_KEY || env.VITE_GROQ_API_KEY || '';
+    const openRouterKey = process.env.VITE_OPENROUTER_API_KEY || env.VITE_OPENROUTER_API_KEY || '';
 
     return {
       base: './', 
@@ -31,9 +24,20 @@ export default defineConfig(({ mode }) => {
           '@': path.resolve('.'),
         }
       },
+      build: {
+        target: 'esnext',
+        minify: 'esbuild'
+      },
+      // 3. Define global constant replacements
+      // This "bakes" the API keys into the code at build time.
       define: {
-        // This replaces process.env in the code with the object defined above
-        'process.env': JSON.stringify(processEnv)
+        'process.env.VITE_GROQ_API_KEY': JSON.stringify(groqKey),
+        'process.env.VITE_OPENROUTER_API_KEY': JSON.stringify(openRouterKey),
+        // Keep general process.env for other needs, but the specific keys above take precedence
+        'process.env': {
+           ...env,
+           NODE_ENV: JSON.stringify(mode)
+        }
       }
     };
 });
