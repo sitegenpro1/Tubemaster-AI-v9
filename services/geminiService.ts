@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { ThumbnailGenResult } from "../types";
 
 // --- CONFIGURATION ---
@@ -12,33 +13,25 @@ const GROQ_MODEL = "openai/gpt-oss-120b";
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_VISION_MODEL = "x-ai/grok-4.1-fast";
 
-// --- API KEYS ---
-// We have removed the hardcoded fallbacks to prevent "User not found" 401 errors from invalid placeholder keys.
-// The app will now STRICTLY rely on the Environment Variables provided in Vercel.
-const FALLBACK_GROQ_KEY = ""; 
-const FALLBACK_OPENROUTER_KEY = "";
-
 // --- HELPERS ---
 
 const getApiKey = (provider: 'GROQ' | 'OPENROUTER') => {
   let key = "";
 
-  // 1. Try to get from Vite Environment (Standard for Vercel)
-  // Cast import.meta to any to avoid TS error.
-  const meta = import.meta as any;
-  if (meta.env) {
-    if (provider === 'GROQ') key = meta.env.VITE_GROQ_API_KEY;
-    if (provider === 'OPENROUTER') key = meta.env.VITE_OPENROUTER_API_KEY;
+  // We rely on vite.config.ts 'define' block which injects these values
+  // from the Vercel System Environment at build time.
+  if (provider === 'GROQ') {
+    key = process.env.VITE_GROQ_API_KEY || "";
+    // Fallback check for standard Vite import if process.env is somehow missed (rare)
+    if (!key && import.meta.env) key = import.meta.env.VITE_GROQ_API_KEY;
+  }
+  
+  if (provider === 'OPENROUTER') {
+    key = process.env.VITE_OPENROUTER_API_KEY || "";
+    if (!key && import.meta.env) key = import.meta.env.VITE_OPENROUTER_API_KEY;
   }
 
-  // 2. Try to get from Process Env (Polyfill/Build)
-  if (!key && typeof process !== 'undefined' && process.env) {
-    if (provider === 'GROQ') key = process.env.VITE_GROQ_API_KEY;
-    if (provider === 'OPENROUTER') key = process.env.VITE_OPENROUTER_API_KEY;
-  }
-
-  // 3. Sanitize
-  // Remove quotes and whitespace (common Vercel copy-paste error)
+  // Sanitize: Remove quotes and whitespace (common Vercel copy-paste error)
   if (key) {
     key = key.replace(/["']/g, "").trim();
   }
