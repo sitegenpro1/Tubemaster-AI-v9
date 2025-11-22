@@ -22,16 +22,20 @@ const getApiKey = (provider: 'GROQ' | 'OPENROUTER') => {
   // from the Vercel System Environment at build time.
   if (provider === 'GROQ') {
     key = process.env.VITE_GROQ_API_KEY || "";
-    // Fallback check for standard Vite import if process.env is somehow missed (rare)
-    if (!key && import.meta.env) key = import.meta.env.VITE_GROQ_API_KEY;
+    // Fallback check for standard Vite import if process.env is somehow missed
+    if (!key && typeof import.meta !== 'undefined' && import.meta.env) {
+        key = import.meta.env.VITE_GROQ_API_KEY as string;
+    }
   }
   
   if (provider === 'OPENROUTER') {
     key = process.env.VITE_OPENROUTER_API_KEY || "";
-    if (!key && import.meta.env) key = import.meta.env.VITE_OPENROUTER_API_KEY;
+    if (!key && typeof import.meta !== 'undefined' && import.meta.env) {
+        key = import.meta.env.VITE_OPENROUTER_API_KEY as string;
+    }
   }
 
-  // Sanitize: Remove quotes and whitespace (common Vercel copy-paste error)
+  // Sanitize: Remove quotes and whitespace
   if (key) {
     key = key.replace(/["']/g, "").trim();
   }
@@ -48,13 +52,9 @@ const callLLM = async (
   jsonMode: boolean = true
 ): Promise<string> => {
   
-  // Ensure we have a valid key
+  // Get key but DO NOT throw error if missing. Let the API 401 if it's wrong.
+  // This prevents false positives in the UI.
   const finalKey = apiKey || getApiKey(url.includes('groq') ? 'GROQ' : 'OPENROUTER');
-
-  if (!finalKey || finalKey.length < 10) {
-    const providerName = url.includes('groq') ? 'Groq' : 'OpenRouter';
-    throw new Error(`Missing API Key for ${providerName}. Please add VITE_${providerName.toUpperCase()}_API_KEY to your Vercel Environment Variables.`);
-  }
 
   const response = await fetch(url, {
     method: "POST",
@@ -77,13 +77,12 @@ const callLLM = async (
     let errorMessage = err;
     try {
         const jsonErr = JSON.parse(err);
-        // Handle specific OpenRouter/Groq error structures
         errorMessage = jsonErr.error?.message || jsonErr.error || err;
     } catch (e) { /* ignore */ }
     
-    // Clean up common error messages for user friendliness
-    if (errorMessage.includes("User not found") || response.status === 401) {
-      errorMessage = "Invalid API Key. Please check your Vercel settings.";
+    // If it's an auth error, we return a generic message, but we don't block the UI beforehand
+    if (response.status === 401) {
+      errorMessage = "Service authentication failed. Please check system configuration.";
     }
     
     throw new Error(`API Error (${response.status}): ${errorMessage}`);
@@ -155,7 +154,6 @@ const compressImage = (base64Str: string): Promise<string> => {
       ctx.drawImage(img, 0, 0, width, height);
       
       // Compress to JPEG at 70% quality
-      // This drastically reduces size while maintaining visual clarity for AI
       const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
       resolve(dataUrl);
     };
@@ -189,7 +187,7 @@ export const findKeywords = async (topic: string): Promise<any[]> => {
 
   const content = await callLLM(
     GROQ_API_URL, 
-    getApiKey('GROQ'), 
+    "", 
     GROQ_MODEL, 
     [{ role: "user", content: prompt }]
   );
@@ -223,7 +221,7 @@ export const analyzeCompetitor = async (channelUrl: string): Promise<any> => {
 
   const content = await callLLM(
     GROQ_API_URL,
-    getApiKey('GROQ'),
+    "",
     GROQ_MODEL,
     [{ role: "user", content: prompt }]
   );
@@ -239,7 +237,7 @@ export const generateScript = async (title: string, audience: string): Promise<a
 
   const content = await callLLM(
     GROQ_API_URL,
-    getApiKey('GROQ'),
+    "",
     GROQ_MODEL,
     [{ role: "user", content: prompt }]
   );
@@ -251,7 +249,7 @@ export const generateScript = async (title: string, audience: string): Promise<a
 export const generateTitles = async (topic: string): Promise<string[]> => {
   const content = await callLLM(
     GROQ_API_URL,
-    getApiKey('GROQ'),
+    "",
     GROQ_MODEL,
     [{ role: "user", content: `Generate 10 click-worthy titles for: "${topic}". JSON object with key "titles".` }]
   );
@@ -264,7 +262,7 @@ export const generateTitles = async (topic: string): Promise<string[]> => {
 export const suggestBestTime = async (title: string, audience: string, tags: string = ""): Promise<string> => {
   const content = await callLLM(
     GROQ_API_URL,
-    getApiKey('GROQ'),
+    "",
     GROQ_MODEL,
     [{ role: "user", content: `Best time to publish: "${title}" for "${audience}". Explain why briefly.` }],
     false // Text response
@@ -283,7 +281,7 @@ export const generateThumbnail = async (prompt: string, style: string, mood: str
       const optPrompt = `Rewrite this image prompt for high-CTR. Style: ${style}. Mood: ${mood}. Original: "${prompt}". Output ONLY the raw prompt text, no quotes.`;
       const optimizedText = await callLLM(
         GROQ_API_URL,
-        getApiKey('GROQ'),
+        "",
         GROQ_MODEL,
         [{ role: "user", content: optPrompt }],
         false
@@ -360,7 +358,7 @@ export const compareThumbnailsVision = async (
   // Uses x-ai/grok-4.1-fast via OpenRouter
   const content = await callLLM(
     OPENROUTER_API_URL,
-    getApiKey('OPENROUTER'),
+    "",
     OPENROUTER_VISION_MODEL,
     messages
   );
