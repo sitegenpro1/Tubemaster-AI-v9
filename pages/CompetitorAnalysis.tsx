@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, Input, Button, Spinner } from '../components/UI';
 import { analyzeCompetitor } from '../services/geminiService';
