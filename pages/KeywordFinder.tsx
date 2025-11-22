@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button, Spinner, Badge } from '../components/UI';
 import { findKeywords } from '../services/geminiService';
