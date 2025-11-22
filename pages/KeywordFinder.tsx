@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button, Spinner, Badge } from '../components/UI';
 import { findKeywords } from '../services/geminiService';
@@ -13,176 +14,104 @@ export const KeywordFinder: React.FC = () => {
 
   const handleSearch = async () => {
     if (!topic) return;
-    
     setError(null);
     setLoading(true);
     setExpandedRow(null);
     setResults([]);
 
     try {
-      // Backend service handles auth. No client inputs needed.
       const data = await findKeywords(topic);
       if (data && data.length > 0) {
         setResults(data);
       } else {
-        setError("No keywords found. Try a different topic.");
+        setError("No high-value keywords found for this specific topic.");
       }
-    } catch (error: any) {
-      console.error("Search error:", error);
-      setError("Unable to analyze at this moment. Please try again.");
+    } catch (error) {
+      console.error(error);
+      setError("Keyword analysis failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCopy = () => {
-    const text = results.map(r => r.keyword).join('\n');
-    navigator.clipboard.writeText(text);
-    alert("Keywords copied to clipboard!");
-  };
-
-  const getDifficultyColor = (score: number) => {
-    if (score < 35) return 'bg-emerald-500 shadow-emerald-500/50';
-    if (score < 65) return 'bg-amber-500 shadow-amber-500/50';
-    return 'bg-rose-500 shadow-rose-500/50';
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score > 75) return 'text-emerald-400';
-    if (score > 45) return 'text-amber-400';
-    return 'text-rose-400';
+  const copyList = () => {
+    navigator.clipboard.writeText(results.map(r => r.keyword).join('\n'));
+    alert("Copied to clipboard");
   };
 
   return (
     <div className="space-y-10 pb-20">
-      <SEO 
-        title="YouTube Keyword Tool" 
-        description="Find high volume, low competition YouTube keywords with our 10-Point Logic analysis system."
-        path="/keywords"
-      />
+      <SEO title="Keyword Explorer" description="Deep logic keyword research." path="/keywords" />
       
-      <div className="text-center relative py-10">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-brand-500/10 blur-[100px] -z-10 rounded-full"></div>
-        <h2 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-4">
-          Keywords <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-300 to-brand-500">Deep Explorer</span>
+      <div className="text-center py-10 relative">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-blue-500/10 blur-[100px] -z-10 rounded-full"></div>
+        <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-4">
+          Keyword <span className="text-brand-400">Deep Dive</span>
         </h2>
-        <p className="text-lg text-slate-400 max-w-2xl mx-auto">
-          Analyze keywords with 10-Point Logic using <strong>Groq Llama 3.3</strong>.
-        </p>
+        <p className="text-lg text-slate-400">10-Point Logic Analysis for Commercial Growth.</p>
       </div>
 
       <div className="max-w-3xl mx-auto space-y-4">
-        <div className="relative group">
-           <div className="absolute -inset-1 bg-gradient-to-r from-brand-500 to-purple-600 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-200"></div>
-           <div className="relative bg-slate-900 rounded-xl border border-slate-700 p-2 flex flex-col sm:flex-row gap-2 items-center shadow-2xl">
-              <div className="pl-3 text-slate-500 hidden sm:block">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-              </div>
-              <input 
-                className="w-full bg-transparent border-none outline-none text-white text-lg placeholder:text-slate-600 px-4 py-3"
-                placeholder="Enter your niche (e.g., 'Digital Marketing')..."
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              />
-              <Button 
-                onClick={handleSearch} 
-                disabled={loading || !topic} 
-                className="w-full sm:w-auto px-8 py-3 text-base shadow-none hover:shadow-lg whitespace-nowrap"
-              >
-                {loading ? <Spinner /> : 'Analyze'}
-              </Button>
-           </div>
+        <div className="bg-slate-900 p-3 rounded-xl border border-slate-700 flex gap-3 items-center shadow-2xl">
+          <input 
+            className="flex-1 bg-transparent border-none outline-none text-white text-lg px-4 py-2 placeholder:text-slate-600"
+            placeholder="Enter niche (e.g., 'Vegan Meal Prep')"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          />
+          <Button onClick={handleSearch} disabled={loading || !topic} className="px-8 py-3">
+            {loading ? <Spinner /> : 'Research'}
+          </Button>
         </div>
-
-        {error && (
-          <div className="mt-6 p-4 bg-rose-900/10 border border-rose-500/20 rounded-lg text-rose-300 text-sm text-center animate-fade-in">
-            {error}
-          </div>
-        )}
+        {error && <p className="text-center text-rose-400 text-sm">{error}</p>}
       </div>
 
       {results.length > 0 && (
-        <div className="space-y-4 animate-fade-in">
-          <div className="flex justify-between items-center px-1">
-             <h3 className="text-xl font-bold text-white">Analysis Results ({results.length})</h3>
-             <button onClick={handleCopy} className="text-sm text-brand-400 hover:text-brand-300 flex items-center gap-1 transition-colors">
-               Copy List
-             </button>
+        <div className="space-y-4 animate-slide-up">
+          <div className="flex justify-between px-2">
+            <h3 className="text-white font-bold">Results</h3>
+            <button onClick={copyList} className="text-brand-400 text-sm hover:text-brand-300">Copy All</button>
           </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl ring-1 ring-white/5">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[800px]">
-                <thead>
-                  <tr className="bg-slate-950/50 border-b border-slate-800 text-slate-400 text-sm uppercase tracking-wider">
-                    <th className="p-4 font-semibold">Keyword</th>
-                    <th className="p-4 font-semibold w-32">Volume</th>
-                    <th className="p-4 font-semibold w-32">KD %</th>
-                    <th className="p-4 font-semibold w-32">Trend</th>
-                    <th className="p-4 font-semibold w-32">Score</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {results.map((row, idx) => (
-                    <React.Fragment key={idx}>
-                      <tr 
-                        onClick={() => setExpandedRow(expandedRow === idx ? null : idx)}
-                        className={`cursor-pointer transition-all duration-200 group ${expandedRow === idx ? 'bg-slate-800/80' : 'hover:bg-slate-800/40'}`}
-                      >
-                        <td className="p-4">
-                          <div className="font-semibold text-slate-200 group-hover:text-white text-lg flex items-center gap-2">
-                            {row.keyword}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="inline-flex items-center px-2.5 py-0.5 rounded border border-slate-700 bg-slate-800 text-slate-300 text-sm whitespace-nowrap">
-                            {row.searchVolume}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 h-2 bg-slate-700 rounded-full w-16 overflow-hidden">
-                              <div className={`h-full rounded-full ${getDifficultyColor(row.difficulty).split(' ')[0]}`} style={{ width: `${row.difficulty}%` }}></div>
-                            </div>
-                            <span className="text-sm font-medium text-slate-400">{row.difficulty}</span>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          {row.trend === 'Rising' ? <Badge color="green">↗ Rising</Badge> : <Badge color="blue">→ Stable</Badge>}
-                        </td>
-                        <td className="p-4">
-                           <span className={`text-lg font-bold ${getScoreColor(row.opportunityScore)}`}>{row.opportunityScore}</span>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-950 text-slate-400 text-sm uppercase">
+                  <th className="p-4">Keyword</th>
+                  <th className="p-4 hidden sm:table-cell">Volume</th>
+                  <th className="p-4 hidden sm:table-cell">KD</th>
+                  <th className="p-4">Score</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {results.map((r, i) => (
+                  <React.Fragment key={i}>
+                    <tr onClick={() => setExpandedRow(expandedRow === i ? null : i)} className="cursor-pointer hover:bg-slate-800/50 transition-colors">
+                      <td className="p-4 font-medium text-slate-200">{r.keyword}</td>
+                      <td className="p-4 hidden sm:table-cell text-slate-400">{r.searchVolume}</td>
+                      <td className="p-4 hidden sm:table-cell">
+                        <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                          <div className={`h-full ${r.difficulty > 60 ? 'bg-rose-500' : r.difficulty > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{width: `${r.difficulty}%`}}></div>
+                        </div>
+                      </td>
+                      <td className="p-4 font-bold text-brand-400">{r.opportunityScore}</td>
+                    </tr>
+                    {expandedRow === i && (
+                      <tr className="bg-slate-950/50">
+                        <td colSpan={4} className="p-6">
+                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                             <div><span className="text-slate-500 block text-xs uppercase">Trend</span> {r.trend}</div>
+                             <div><span className="text-slate-500 block text-xs uppercase">Intent</span> {r.intent}</div>
+                             <div><span className="text-slate-500 block text-xs uppercase">CPC</span> {r.cpc}</div>
+                             <div><span className="text-slate-500 block text-xs uppercase">Competitor</span> {r.topCompetitor}</div>
+                           </div>
                         </td>
                       </tr>
-                      {expandedRow === idx && (
-                        <tr className="bg-slate-900/80 border-b border-slate-800 animate-fade-in">
-                          <td colSpan={5} className="p-6">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                               <div className="space-y-2">
-                                 <h4 className="text-xs font-bold text-slate-500 uppercase">Metrics</h4>
-                                 <p className="text-sm text-slate-300">CPC: {row.cpc}</p>
-                                 <p className="text-sm text-slate-300">Competition: {row.competitionDensity}</p>
-                                 <p className="text-sm text-slate-300">Intent: {row.intent}</p>
-                               </div>
-                               <div className="space-y-2">
-                                 <h4 className="text-xs font-bold text-slate-500 uppercase">Competitor</h4>
-                                 <p className="text-sm text-brand-400">{row.topCompetitor}</p>
-                                 <p className="text-sm text-slate-400">Freshness: {row.videoAgeAvg}</p>
-                               </div>
-                               <div className="space-y-2">
-                                 <h4 className="text-xs font-bold text-slate-500 uppercase">Potential</h4>
-                                 <Badge color={row.ctrPotential === 'High' ? 'green' : 'yellow'}>{row.ctrPotential} CTR</Badge>
-                               </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
