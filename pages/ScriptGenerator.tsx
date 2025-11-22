@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, Input, Button, Spinner, Select, Badge } from '../components/UI';
 import { generateScript } from '../services/geminiService';
@@ -6,7 +7,7 @@ import { SEO } from '../components/SEO';
 
 export const ScriptGenerator: React.FC = () => {
   const [title, setTitle] = useState('');
-  const [audience, setAudience] = useState('Beginners');
+  const [audience, setAudience] = useState('General');
   const [loading, setLoading] = useState(false);
   const [script, setScript] = useState<ScriptResponse | null>(null);
 
@@ -15,92 +16,71 @@ export const ScriptGenerator: React.FC = () => {
     setLoading(true);
     setScript(null);
     try {
-      // Service handles all auth automatically.
       const data = await generateScript(title, audience);
-      if (data && data.sections) {
-        setScript(data);
-      } else {
-        throw new Error("Invalid script format received");
-      }
-    } catch (err: any) {
-      console.error(err);
-      // Non-blocking alert for errors
-      alert("Unable to generate script. Please try again in a moment.");
+      if (data && data.sections) setScript(data);
+    } catch (e) {
+      console.error(e);
+      alert("Script generation failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCopyAll = () => {
-    if (!script || !script.sections) return;
-    const text = script.sections.map(s => `[${s.logicStep}] ${s.title} (${s.duration})\nAudio: ${s.content}\nVisual: ${s.visualCue}`).join('\n\n');
-    navigator.clipboard.writeText(text);
-    alert("Full script copied to clipboard!");
-  };
-
   return (
     <div className="grid lg:grid-cols-12 gap-8 h-[calc(100vh-140px)] pb-10">
-      <SEO title="AI Video Script Writer" description="Generate retention-optimized YouTube scripts." path="/script" />
+      <SEO title="Script Writer" description="AI Script Generator" path="/script" />
+      
       <div className="lg:col-span-4 space-y-6 h-full overflow-y-auto custom-scrollbar pr-2">
-        <Card title="Research & Logic" description="Define the parameters for the smart script algorithm." className="border-brand-500/20 shadow-xl shadow-brand-900/5">
-          <div className="space-y-6">
+        <Card title="Script Settings" className="shadow-xl">
+          <div className="space-y-5">
             <div>
-              <label className="block text-sm font-bold text-slate-300 mb-2">Video Title / Topic</label>
-              <Input placeholder="e.g., How to build a PC in 2024" value={title} onChange={(e) => setTitle(e.target.value)} />
+              <label className="block text-sm font-bold text-slate-400 mb-2">Topic</label>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Galaxy S24 Review" />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-300 mb-2">Target Audience</label>
+              <label className="block text-sm font-bold text-slate-400 mb-2">Audience</label>
               <Select value={audience} onChange={(e) => setAudience(e.target.value)}>
+                <option>General</option>
+                <option>Experts</option>
                 <option>Beginners</option>
-                <option>Experts / Pro Users</option>
-                <option>Children</option>
-                <option>Tech Enthusiasts</option>
+                <option>Kids</option>
               </Select>
             </div>
-
-            <Button onClick={handleGenerate} disabled={loading || !title} className="w-full py-4 text-lg">
-              {loading ? <><Spinner /> Analyzing...</> : '🚀 Generate Script'}
+            <Button onClick={handleGenerate} disabled={loading || !title} className="w-full py-4">
+              {loading ? <Spinner /> : 'Generate Script'}
             </Button>
           </div>
         </Card>
       </div>
 
-      <div className="lg:col-span-8 h-full flex flex-col bg-slate-950/50 rounded-2xl border border-slate-800 relative overflow-hidden backdrop-blur-sm">
-        {script && script.sections && script.sections.length > 0 ? (
+      <div className="lg:col-span-8 h-full bg-slate-950/50 rounded-2xl border border-slate-800 overflow-hidden flex flex-col">
+        {script ? (
           <>
-            <div className="p-6 border-b border-slate-800 bg-slate-900/80 flex justify-between items-center sticky top-0 z-20 backdrop-blur-md">
-               <div>
-                  <h2 className="text-xl font-bold text-white">{script.title}</h2>
-                  <div className="flex items-center gap-4 mt-1 text-sm text-slate-400">
-                    <span>⏱ {script.estimatedDuration}</span>
-                  </div>
-               </div>
-               <Button onClick={handleCopyAll} variant="outline" className="text-sm">📋 Copy</Button>
+            <div className="p-4 border-b border-slate-800 bg-slate-900 flex justify-between items-center">
+              <h3 className="font-bold text-white truncate">{script.title}</h3>
+              <Badge>{script.estimatedDuration}</Badge>
             </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-8 space-y-8">
-               {script.sections.map((section, idx) => (
-                 <div key={idx} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden hover:border-slate-600 transition-all">
-                    <div className="bg-slate-950/50 px-5 py-3 border-b border-slate-800 flex justify-between items-center">
-                       <Badge color="brand">{section.logicStep}</Badge>
-                       <span className="text-xs text-slate-500">{section.duration}</span>
+            <div className="p-6 overflow-y-auto custom-scrollbar space-y-6 flex-1">
+              {script.sections.map((s, i) => (
+                <div key={i} className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+                  <div className="bg-slate-950 px-4 py-2 border-b border-slate-800 flex justify-between">
+                    <span className="text-brand-400 font-bold text-sm uppercase">{s.logicStep}</span>
+                    <span className="text-slate-500 text-xs">{s.duration}</span>
+                  </div>
+                  <div className="p-4 grid md:grid-cols-2 gap-4">
+                    <div className="text-slate-300 text-sm leading-relaxed">{s.content}</div>
+                    <div className="text-slate-500 text-xs italic border-l border-slate-800 pl-4 flex items-center">
+                      🎥 {s.visualCue}
                     </div>
-                    <div className="grid md:grid-cols-2">
-                       <div className="p-5 border-r border-slate-800/50">
-                          <p className="text-slate-200 text-sm">{section.content}</p>
-                       </div>
-                       <div className="p-5 bg-slate-900/30">
-                          <p className="text-indigo-200/80 text-sm italic">{section.visualCue}</p>
-                       </div>
-                    </div>
-                 </div>
-               ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-6">
-             <span className="text-6xl">🎬</span>
-             <h3 className="text-2xl font-bold text-white">Script Writer</h3>
-             <p className="text-slate-400">Powered by Llama 3.3 (Groq)</p>
+          <div className="flex-1 flex items-center justify-center text-slate-600 flex-col gap-4">
+            <div className="text-6xl opacity-20">📝</div>
+            <p>Ready to write viral content.</p>
           </div>
         )}
       </div>
