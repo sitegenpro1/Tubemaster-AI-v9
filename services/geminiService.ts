@@ -1,247 +1,125 @@
 
-import { ThumbnailGenResult } from "../types";
+import React, { useState } from 'react';
+import { Card, Input, Button, Spinner } from '../components/UI';
+import { analyzeCompetitor } from '../services/geminiService';
+import { CompetitorAnalysisResult } from '../types';
+import { SEO } from '../components/SEO';
 
-// --- CONFIGURATION ---
+export const CompetitorAnalysis: React.FC = () => {
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<CompetitorAnalysisResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.3-70b-versatile"; 
-
-const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const OPENROUTER_VISION_MODEL = "x-ai/grok-vision-beta"; 
-
-// --- API KEY MANAGEMENT ---
-
-const getApiKey = (provider: 'GROQ' | 'OPENROUTER'): string => {
-  // In Vite, we access env vars via import.meta.env
-  if (provider === 'GROQ') {
-    return import.meta.env.VITE_GROQ_API_KEY || "";
-  } else {
-    return import.meta.env.VITE_OPENROUTER_API_KEY || "";
-  }
-};
-
-// --- CORE HELPERS ---
-
-const cleanJson = (text: string): string => {
-  if (!text) return "{}";
-  let clean = text.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
-  clean = clean.replace(/<think>[\s\S]*?<\/think>/g, "");
-  
-  const firstBrace = clean.indexOf('{');
-  const lastBrace = clean.lastIndexOf('}');
-  
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    return clean.substring(firstBrace, lastBrace + 1);
-  }
-  return clean;
-};
-
-const callLLM = async (
-  provider: 'GROQ' | 'OPENROUTER',
-  model: string,
-  messages: any[],
-  jsonMode: boolean = true
-): Promise<string> => {
-  const url = provider === 'GROQ' ? GROQ_API_URL : OPENROUTER_API_URL;
-  const apiKey = getApiKey(provider);
-  
-  const headers: Record<string, string> = {
-    "Authorization": `Bearer ${apiKey}`,
-    "Content-Type": "application/json"
-  };
-
-  if (provider === 'OPENROUTER') {
-    headers["HTTP-Referer"] = "https://tubemaster.ai";
-    headers["X-Title"] = "TubeMaster";
-  }
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: model,
-        messages: messages,
-        temperature: 0.7,
-        max_tokens: 4000,
-        response_format: jsonMode ? { type: "json_object" } : undefined
-      })
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error(`LLM Error (${response.status}):`, errText);
-      // We return empty JSON on failure to prevent app crashes
-      return "{}";
-    }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || "{}";
-  } catch (error) {
-    console.error("LLM Call Failed:", error);
-    return "{}";
-  }
-};
-
-const compressImage = (base64Str: string): Promise<string> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.src = base64Str;
-    img.crossOrigin = "Anonymous";
-    img.onload = () => {
-      const MAX = 1024;
-      let w = img.width;
-      let h = img.height;
-      if (w > h) { if (w > MAX) { h = Math.round((h * MAX) / w); w = MAX; } }
-      else { if (h > MAX) { w = Math.round((w * MAX) / h); h = MAX; } }
-      
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
-      } else {
-        resolve(base64Str);
-      }
-    };
-    img.onerror = () => resolve(base64Str);
-  });
-};
-
-// --- EXPORTED SERVICES ---
-
-export const findKeywords = async (topic: string): Promise<any[]> => {
-  const prompt = `
-    Act as a YouTube SEO Algorithm Expert.
-    Topic: "${topic}"
-    Generate 10 highly specific keywords/tags.
-    Return strictly a JSON object: { "keywords": [ { "keyword": "...", "searchVolume": "...", "difficulty": 50, "opportunityScore": 80, "trend": "Rising", "intent": "Educational", "cpc": "$1.20", "competitionDensity": "Medium", "topCompetitor": "Channel Name", "videoAgeAvg": "2 years", "ctrPotential": "High" } ] }
-  `;
-  const json = await callLLM('GROQ', GROQ_MODEL, [{ role: "user", content: prompt }]);
-  try {
-    const parsed = JSON.parse(cleanJson(json));
-    return Array.isArray(parsed.keywords) ? parsed.keywords : [];
-  } catch (e) {
-    return [];
-  }
-};
-
-// HYBRID MODEL: Web Scraper + AI Reasoning
-export const analyzeCompetitor = async (channelUrl: string): Promise<any> => {
-  let contextData = "";
-  
-  // 1. Web Scraping Layer
-  try {
-    // Use AllOrigins to proxy the request and avoid CORS
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(channelUrl)}`;
-    const response = await fetch(proxyUrl);
+  const handleAnalyze = async () => {
+    if (!url) return;
+    setLoading(true);
+    setError(null);
+    setData(null);
     
-    if (response.ok) {
-      const data = await response.json();
-      const html = data.contents;
-      
-      // Regex extraction for key metadata (lighter than parsing full DOM)
-      const titleMatch = html.match(/<title>(.*?)<\/title>/);
-      const descMatch = html.match(/name="description" content="(.*?)"/);
-      const keywordsMatch = html.match(/name="keywords" content="(.*?)"/);
-      
-      const title = titleMatch ? titleMatch[1] : "Unknown Channel";
-      const description = descMatch ? descMatch[1] : "";
-      const keywords = keywordsMatch ? keywordsMatch[1] : "";
-      
-      contextData = `Channel Name: ${title}\nDescription: ${description}\nKeywords: ${keywords}`;
-    }
-  } catch (e) {
-    console.warn("Scraping failed, proceeding with AI inference only.", e);
-    contextData = `Channel URL: ${channelUrl} (Metadata could not be scraped)`;
-  }
-
-  // 2. AI Reasoning Layer
-  const prompt = `
-    Analyze this competitor channel based on the available data:
-    ${contextData.substring(0, 2000)}
-    
-    If data is scarce, infer based on the channel name or likely niche.
-    
-    Task: Provide a strategic analysis.
-    Return JSON:
-    {
-      "channelName": "...",
-      "subscriberEstimate": "e.g. 100k-500k",
-      "strengths": ["strength 1", "strength 2", "strength 3"],
-      "weaknesses": ["weakness 1", "weakness 2", "weakness 3"],
-      "contentGaps": ["gap 1", "gap 2", "gap 3"],
-      "actionPlan": "One sentence strategy to beat them."
-    }
-  `;
-
-  const json = await callLLM('GROQ', GROQ_MODEL, [{ role: "user", content: prompt }]);
-  return JSON.parse(cleanJson(json));
-};
-
-export const generateScript = async (title: string, audience: string): Promise<any> => {
-  const prompt = `
-    Write a YouTube script for "${title}" aimed at "${audience}".
-    Structure: Hook -> Context -> Value -> Pattern Interrupt -> Payoff.
-    Return JSON: { "title": "...", "estimatedDuration": "...", "targetAudience": "...", "sections": [ { "title": "...", "content": "...", "duration": "...", "visualCue": "...", "logicStep": "..." } ] }
-  `;
-  const json = await callLLM('GROQ', GROQ_MODEL, [{ role: "user", content: prompt }]);
-  return JSON.parse(cleanJson(json));
-};
-
-export const generateTitles = async (topic: string): Promise<string[]> => {
-  const prompt = `Generate 10 click-worthy, viral-style YouTube titles for: "${topic}". Return JSON: { "titles": ["..."] }`;
-  const json = await callLLM('GROQ', GROQ_MODEL, [{ role: "user", content: prompt }]);
-  const parsed = JSON.parse(cleanJson(json));
-  return parsed.titles || [];
-};
-
-export const suggestBestTime = async (title: string, audience: string, tags: string): Promise<string> => {
-  const prompt = `Best time to publish video "${title}" for "${audience}". Keep it brief (2 sentences).`;
-  return await callLLM('GROQ', GROQ_MODEL, [{ role: "user", content: prompt }], false);
-};
-
-export const generateThumbnail = async (prompt: string, style: string, mood: string, optimize: boolean): Promise<ThumbnailGenResult> => {
-  let finalPrompt = prompt;
-  
-  if (optimize) {
     try {
-      finalPrompt = await callLLM('GROQ', GROQ_MODEL, [{ 
-        role: "user", 
-        content: `Optimize this image prompt for Flux AI. Make it highly detailed. Prompt: "${prompt}". Style: ${style}, ${mood}. Output ONLY text.` 
-      }], false);
-    } catch (e) { /* ignore */ }
-  }
-
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=1280&height=720&model=flux&seed=${Math.floor(Math.random() * 9999)}`;
-  
-  return {
-    imageUrl: url,
-    originalPrompt: prompt,
-    optimizedPrompt: finalPrompt,
-    style,
-    createdAt: Date.now()
-  };
-};
-
-export const compareThumbnailsVision = async (imgA: string, imgB: string, provider: 'GROQ' | 'OPENROUTER'): Promise<any> => {
-  const [cA, cB] = await Promise.all([compressImage(imgA), compressImage(imgB)]);
-  const prompt = `Analyze these two thumbnails. Which has higher CTR? Return JSON: { "winner": "A", "scoreA": 8, "scoreB": 6, "reasoning": "...", "breakdown": [{"criterion": "Contrast", "winner": "A", "explanation": "..."}] }`;
-
-  const json = await callLLM('OPENROUTER', OPENROUTER_VISION_MODEL, [
-    {
-      role: "user",
-      content: [
-        { type: "text", text: prompt },
-        { type: "image_url", image_url: { url: cA } },
-        { type: "image_url", image_url: { url: cB } }
-      ]
+      // Calls the Hybrid (Scraper + AI) service
+      const result = await analyzeCompetitor(url);
+      
+      if (result && (result.strengths || result.actionPlan)) {
+        setData(result);
+      } else {
+        throw new Error("Unable to analyze channel data.");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Analysis failed. Please check the URL and try again.");
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
-  return JSON.parse(cleanJson(json));
+  return (
+    <div className="max-w-4xl mx-auto space-y-8 pb-20">
+      <SEO title="Competitor Spy" description="Hybrid AI + Web Scraping analysis." path="/competitors" />
+      
+      <div className="text-center space-y-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-white">Competitor Spy</h2>
+        <p className="text-slate-400">
+          Deep channel analysis using Hybrid Logic (Web Scraping + AI Reasoning).
+        </p>
+      </div>
+
+      <div className="bg-slate-900/50 p-8 rounded-2xl border border-slate-800 shadow-xl">
+        <div className="flex flex-col md:flex-row gap-4">
+          <Input 
+            placeholder="Paste Channel URL (e.g., https://youtube.com/@ChannelName)"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
+          />
+          <Button onClick={handleAnalyze} disabled={loading || !url} className="md:w-48 font-bold text-lg">
+            {loading ? <><Spinner /> Scanning...</> : 'Analyze Channel'}
+          </Button>
+        </div>
+        {error && (
+          <div className="mt-4 p-3 bg-rose-500/10 border border-rose-500/20 rounded text-rose-400 text-sm text-center">
+            {error}
+          </div>
+        )}
+      </div>
+
+      {loading && !data && (
+        <div className="text-center py-12 animate-pulse">
+          <div className="text-4xl mb-4">🕵️‍♂️</div>
+          <p className="text-slate-400">Scraping channel data & analyzing content gaps...</p>
+        </div>
+      )}
+
+      {data && (
+        <div className="space-y-6 animate-slide-up">
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card title="Channel Profile">
+              <div className="text-center py-2">
+                <h3 className="text-2xl font-bold text-white">{data.channelName || 'Analyzed Channel'}</h3>
+                <div className="mt-2 inline-block bg-slate-800 px-3 py-1 rounded-full text-xs text-slate-400 uppercase tracking-wider">
+                  Est. Subs: <span className="text-brand-400 font-bold">{data.subscriberEstimate}</span>
+                </div>
+              </div>
+            </Card>
+            <Card title="Strategic Attack Plan" className="bg-brand-900/10 border-brand-500/30">
+              <p className="text-lg text-slate-200 italic">"{data.actionPlan}"</p>
+            </Card>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-6">
+            <Card title="Strengths" className="border-emerald-500/20">
+              <ul className="space-y-2">
+                {data.strengths?.map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="text-emerald-400">✓</span> {s}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+
+            <Card title="Weaknesses" className="border-rose-500/20">
+               <ul className="space-y-2">
+                {data.weaknesses?.map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="text-rose-400">✕</span> {s}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+
+            <Card title="Missed Gaps" className="border-amber-500/20">
+               <ul className="space-y-2">
+                {data.contentGaps?.map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="text-amber-400">⚠</span> {s}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
