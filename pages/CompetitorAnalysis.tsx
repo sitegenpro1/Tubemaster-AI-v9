@@ -8,94 +8,98 @@ export const CompetitorAnalysis: React.FC = () => {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<CompetitorAnalysisResult | null>(null);
-
-  // API Key State
-  const [userKey, setUserKey] = useState('');
-  const hasEnvKey = !!process.env.GROQ_API_KEY;
+  const [error, setError] = useState<string | null>(null);
 
   const handleAnalyze = async () => {
     if (!url) return;
-    
-    const keyToUse = hasEnvKey ? undefined : userKey;
-    if (!hasEnvKey && !userKey) {
-      alert("Please enter a Groq API Key.");
-      return;
-    }
-
     setLoading(true);
+    setError(null);
+    setData(null);
+    
     try {
-      const result = await analyzeCompetitor(url, keyToUse);
+      const result = await analyzeCompetitor(url);
+      if (!result) throw new Error("Analysis yielded no data.");
       setData(result);
-    } catch (error) {
-      alert("Analysis failed. Ensure the URL is valid and the channel is public.");
+    } catch (err: any) {
+      console.error(err);
+      setError("Unable to analyze channel. Please verify the URL or try again later.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <SEO 
-        title="YouTube Competitor Spy Tool" 
-        description="Ethically analyze competitor YouTube channels to find content gaps, weaknesses, and growth opportunities."
-        path="/competitors"
-      />
-      <div className="text-center">
-        <h2 className="text-3xl font-bold text-white">Competitor Spy</h2>
-        <p className="text-slate-400 mt-2">Paste a channel URL to extract content gaps and strategy.</p>
+    <div className="max-w-4xl mx-auto space-y-8 pb-20">
+      <SEO title="YouTube Competitor Spy Tool" description="Ethically analyze competitor YouTube channels." path="/competitors" />
+      
+      <div className="text-center space-y-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-white">Competitor Spy</h2>
+        <p className="text-slate-400 max-w-2xl mx-auto">
+          Hybrid Analysis: Web Scraper + Groq (OpenAI OSS 120B) Logic. 
+          <br/>Enter a channel URL to extract content gaps and opportunities.
+        </p>
       </div>
 
-      {!hasEnvKey && (
-        <div className="max-w-lg mx-auto bg-amber-900/20 border border-amber-500/30 p-3 rounded-lg flex items-center gap-3">
-          <div className="flex-1">
-            <label className="block text-xs font-bold text-amber-200 mb-1">Groq API Key</label>
-            <Input 
-              type="password" 
-              placeholder="gsk_..." 
-              value={userKey} 
-              onChange={(e) => setUserKey(e.target.value)} 
-              className="text-sm py-2 h-9"
-            />
-          </div>
+      <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 shadow-xl">
+        <div className="flex flex-col md:flex-row gap-3">
+          <Input 
+            placeholder="https://www.youtube.com/@ChannelName"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
+          />
+          <Button onClick={handleAnalyze} disabled={loading} className="md:w-40">
+            {loading ? <Spinner /> : 'Spy'}
+          </Button>
         </div>
-      )}
-
-      <div className="flex gap-2">
-        <Input 
-          placeholder="https://www.youtube.com/@ChannelName"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-        />
-        <Button onClick={handleAnalyze} disabled={loading}>
-          {loading ? <Spinner /> : 'Spy'}
-        </Button>
+        {error && <p className="text-rose-400 text-sm mt-3 text-center">{error}</p>}
       </div>
 
       {data && (
         <div className="space-y-6 animate-fade-in">
           <div className="grid md:grid-cols-2 gap-6">
-            <Card title={data.channelName}>
-              <p className="text-brand-400 font-mono text-lg">{data.subscriberEstimate} Est. Subs</p>
+            <Card title={data.channelName || 'Unknown Channel'}>
+              <div className="text-center py-4">
+                <p className="text-sm text-slate-500 uppercase tracking-wider">Estimated Reach</p>
+                <p className="text-3xl font-bold text-brand-400 mt-1">{data.subscriberEstimate || 'N/A'}</p>
+              </div>
             </Card>
-             <Card title="Action Plan" className="border-brand-500/30 bg-brand-900/10">
-              <p className="text-slate-300">{data.actionPlan}</p>
+             <Card title="Strategic Action Plan" className="border-brand-500/30 bg-brand-900/10">
+              <p className="text-slate-300 leading-relaxed">{data.actionPlan || 'No action plan generated.'}</p>
             </Card>
           </div>
-
+          
           <div className="grid md:grid-cols-3 gap-6">
+            {/* Strengths */}
             <Card title="Strengths" className="border-green-900/50">
-              <ul className="list-disc list-inside text-green-400 space-y-2">
-                {data.strengths.map((s, i) => <li key={i}>{s}</li>)}
+              <ul className="space-y-3">
+                {data.strengths?.map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-slate-300 text-sm">
+                    <span className="text-green-400 mt-1">✓</span> {s}
+                  </li>
+                ))}
               </ul>
             </Card>
+
+            {/* Weaknesses */}
             <Card title="Weaknesses" className="border-red-900/50">
-               <ul className="list-disc list-inside text-red-400 space-y-2">
-                {data.weaknesses.map((s, i) => <li key={i}>{s}</li>)}
+               <ul className="space-y-3">
+                {data.weaknesses?.map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-slate-300 text-sm">
+                    <span className="text-red-400 mt-1">✕</span> {s}
+                  </li>
+                ))}
               </ul>
             </Card>
-            <Card title="Content Gaps (Opportunity)" className="border-amber-900/50">
-               <ul className="list-disc list-inside text-amber-400 space-y-2">
-                {data.contentGaps.map((s, i) => <li key={i}>{s}</li>)}
+
+            {/* Gaps */}
+            <Card title="Content Gaps" className="border-amber-900/50">
+               <ul className="space-y-3">
+                {data.contentGaps?.map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-slate-300 text-sm">
+                    <span className="text-amber-400 mt-1">⚠</span> {s}
+                  </li>
+                ))}
               </ul>
             </Card>
           </div>
