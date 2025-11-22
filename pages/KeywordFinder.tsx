@@ -29,7 +29,6 @@ export const KeywordFinder: React.FC = () => {
       }
     } catch (error: any) {
       console.error("Search error:", error);
-      // Display a friendly message instead of raw technical errors
       setError("Unable to analyze at this moment. Please try again.");
     } finally {
       setLoading(false);
