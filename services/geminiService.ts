@@ -13,10 +13,10 @@ const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_VISION_MODEL = "x-ai/grok-4.1-fast";
 
 // --- API KEYS ---
-// We provide fallbacks here to ensure the preview works immediately without .env setup.
-// On Vercel, the Environment Variables will take precedence if set.
-const FALLBACK_GROQ_KEY = "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";
-const FALLBACK_OPENROUTER_KEY = "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";
+// We have removed the hardcoded fallbacks to prevent "User not found" 401 errors from invalid placeholder keys.
+// The app will now STRICTLY rely on the Environment Variables provided in Vercel.
+const FALLBACK_GROQ_KEY = ""; 
+const FALLBACK_OPENROUTER_KEY = "";
 
 // --- HELPERS ---
 
@@ -24,7 +24,7 @@ const getApiKey = (provider: 'GROQ' | 'OPENROUTER') => {
   let key = "";
 
   // 1. Try to get from Vite Environment (Standard for Vercel)
-  // Cast import.meta to any to avoid TS error: Property 'env' does not exist on type 'ImportMeta'.
+  // Cast import.meta to any to avoid TS error.
   const meta = import.meta as any;
   if (meta.env) {
     if (provider === 'GROQ') key = meta.env.VITE_GROQ_API_KEY;
@@ -37,14 +37,13 @@ const getApiKey = (provider: 'GROQ' | 'OPENROUTER') => {
     if (provider === 'OPENROUTER') key = process.env.VITE_OPENROUTER_API_KEY;
   }
 
-  // 3. Fallback to Hardcoded Keys (Fixes "Missing Key" error in Preview)
-  if (!key || key.includes("undefined") || key === "") {
-    if (provider === 'GROQ') return FALLBACK_GROQ_KEY;
-    if (provider === 'OPENROUTER') return FALLBACK_OPENROUTER_KEY;
+  // 3. Sanitize
+  // Remove quotes and whitespace (common Vercel copy-paste error)
+  if (key) {
+    key = key.replace(/["']/g, "").trim();
   }
 
-  // Clean up quotes if JSON.stringify added them
-  return key ? key.replace(/"/g, '').trim() : "";
+  return key;
 };
 
 // Helper: Standard Fetch Wrapper for Groq/OpenRouter
@@ -59,8 +58,9 @@ const callLLM = async (
   // Ensure we have a valid key
   const finalKey = apiKey || getApiKey(url.includes('groq') ? 'GROQ' : 'OPENROUTER');
 
-  if (!finalKey) {
-    throw new Error(`Configuration Error: API Key for ${url.includes('groq') ? 'Groq' : 'OpenRouter'} could not be found.`);
+  if (!finalKey || finalKey.length < 10) {
+    const providerName = url.includes('groq') ? 'Groq' : 'OpenRouter';
+    throw new Error(`Missing API Key for ${providerName}. Please add VITE_${providerName.toUpperCase()}_API_KEY to your Vercel Environment Variables.`);
   }
 
   const response = await fetch(url, {
@@ -84,8 +84,14 @@ const callLLM = async (
     let errorMessage = err;
     try {
         const jsonErr = JSON.parse(err);
-        errorMessage = jsonErr.error?.message || err;
+        // Handle specific OpenRouter/Groq error structures
+        errorMessage = jsonErr.error?.message || jsonErr.error || err;
     } catch (e) { /* ignore */ }
+    
+    // Clean up common error messages for user friendliness
+    if (errorMessage.includes("User not found") || response.status === 401) {
+      errorMessage = "Invalid API Key. Please check your Vercel settings.";
+    }
     
     throw new Error(`API Error (${response.status}): ${errorMessage}`);
   }
@@ -358,7 +364,7 @@ export const compareThumbnailsVision = async (
     }
   ];
 
-  // Uses x-ai/grok-4.1-fast
+  // Uses x-ai/grok-4.1-fast via OpenRouter
   const content = await callLLM(
     OPENROUTER_API_URL,
     getApiKey('OPENROUTER'),
